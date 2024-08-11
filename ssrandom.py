@@ -26,6 +26,7 @@ def random_line_selector(input_file, output_dir, output_file, num_lines=500):
         f.writelines(selected_lines)
 
 # Use the function with your specific file names and directory
+input_dir = "splitbytype"
 input_file = "ss.txt"
 output_dir = "splitbytype"
 output_file = "ssrandom.txt"
