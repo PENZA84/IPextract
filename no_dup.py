@@ -1,37 +1,42 @@
 import base64
 import json
 import re
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 def parse_vless(config):
-    parts = config.split("://")[1].split("@")
-    uuid = parts[0]
-    rest = "@".join(parts[1:])
-    url = urlparse(f"https://{rest}")
+    parts = config.split("://")[1].split("#")
+    main_part = parts[0]
+    remark = unquote(parts[1]) if len(parts) > 1 else ""
+    uuid_and_address, params = main_part.split("?")
+    uuid, rest = uuid_and_address.split("@")
+    url = urlparse(f"https://{rest}?{params}")
     query = parse_qs(url.query)
     return {
         'address': url.hostname,
         'port': url.port,
         'uuid': uuid,
         'sni': query.get('sni', [None])[0],
-        'path': query.get('path', [None])[0]
+        'path': query.get('path', [None])[0],
+        'remark': remark
     }
 
 def parse_ss(config):
     try:
-        parts = config.split("://")[1].split("@")
-        encoded = parts[0]
-        # Add padding if necessary
+        parts = config.split("://")[1].split("#")
+        main_part = parts[0]
+        remark = unquote(parts[1]) if len(parts) > 1 else ""
+        user_info, rest = main_part.split("@")
+        encoded = user_info
         encoded += "=" * ((4 - len(encoded) % 4) % 4)
         decoded = base64.urlsafe_b64decode(encoded).decode('utf-8')
         method, password = decoded.split(':')
-        rest = "@".join(parts[1:])
         url = urlparse(f"https://{rest}")
         return {
             'address': url.hostname,
             'port': url.port,
             'password': password,
-            'encryption': method
+            'encryption': method,
+            'remark': remark
         }
     except Exception as e:
         print(f"Error parsing SS config: {config}")
@@ -39,22 +44,10 @@ def parse_ss(config):
         return None
 
 def parse_hysteria2(config):
-    parts = config.split("://")[1].split("@")
-    password = parts[0]
-    rest = "@".join(parts[1:])
-    url = urlparse(f"https://{rest}")
-    query = parse_qs(url.query)
-    return {
-        'address': url.hostname,
-        'port': url.port,
-        'password': password,
-        'sni': query.get('sni', [None])[0]
-    }
-
-def parse_trojan(config):
-    parts = config.split("://")[1].split("@")
-    password = parts[0]
-    rest = "@".join(parts[1:])
+    parts = config.split("://")[1].split("#")
+    main_part = parts[0]
+    remark = unquote(parts[1]) if len(parts) > 1 else ""
+    password, rest = main_part.split("@")
     url = urlparse(f"https://{rest}")
     query = parse_qs(url.query)
     return {
@@ -62,13 +55,28 @@ def parse_trojan(config):
         'port': url.port,
         'password': password,
         'sni': query.get('sni', [None])[0],
-        'path': query.get('path', [None])[0]
+        'remark': remark
+    }
+
+def parse_trojan(config):
+    parts = config.split("://")[1].split("#")
+    main_part = parts[0]
+    remark = unquote(parts[1]) if len(parts) > 1 else ""
+    password, rest = main_part.split("@")
+    url = urlparse(f"https://{rest}")
+    query = parse_qs(url.query)
+    return {
+        'address': url.hostname,
+        'port': url.port,
+        'password': password,
+        'sni': query.get('sni', [None])[0],
+        'path': query.get('path', [None])[0],
+        'remark': remark
     }
 
 def parse_vmess(config):
     try:
         encoded = config.split("://")[1]
-        # Add padding if necessary
         encoded += "=" * ((4 - len(encoded) % 4) % 4)
         decoded = base64.urlsafe_b64decode(encoded).decode('utf-8')
         data = json.loads(decoded)
@@ -77,7 +85,8 @@ def parse_vmess(config):
             'port': data['port'],
             'uuid': data['id'],
             'sni': data.get('sni'),
-            'path': data.get('path')
+            'path': data.get('path'),
+            'remark': data.get('ps', '')
         }
     except Exception as e:
         print(f"Error parsing VMess config: {config}")
