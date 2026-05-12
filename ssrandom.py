@@ -26,7 +26,7 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-      - name: 🛠 ПОДГОТОВКА (Создание структуры и заглушек)
+      - name: ПОДГОТОВКА (Создание структуры и заглушек)
         run: |
           # Создаем папки из твоего скриншота 855
           mkdir -p split splitorg archive archiveorg splitbytype
@@ -37,7 +37,7 @@ jobs:
           # Создаем важную заглушку в папке, которую ждет ssrandom.py
           touch splitbytype/ss.txt
 
-      - name: 📡 СБОР (Fetch из твоих источников)
+      - name: СБОР (Fetch из твоих источников)
         run: |
           > proxies.txt
           urls=(
@@ -66,7 +66,7 @@ jobs:
             fi
           done
 
-      - name: 🧪 ЗАПУСК ПАРСЕРОВ (Processing)
+      - name:  ЗАПУСК ПАРСЕРОВ (Processing)
         run: |
           # Последовательный запуск твоих скриптов
           python no_dup.py || echo "skip"
@@ -80,7 +80,7 @@ jobs:
           python split_file.py || echo "skip"
           python splitorg_file.py || echo "skip"
 
-      - name: 🚀 ОПТИМИЗАЦИЯ И ПУШ (Финальный штрих)
+      - name: ОПТИМИЗАЦИЯ И ПУШ (Финальный штрих)
         run: |
           # Наш фирменный «Хирург» для Трона: режем всё, что выше 90 МБ
           python -c "
@@ -99,7 +99,7 @@ jobs:
           git add split/ splitorg/ archive/ archiveorg/ splitbytype/
           
           if ! git diff --cached --quiet; then
-            git commit -m "🚀 Завод IPextract: база обновлена, пути исправлены 💋🍀"
+            git commit -m " Завод IPextract: база обновлена, пути исправлены 💋🍀"
             git push
           else
             echo "Ничего нового, ждем следующего цикла."
