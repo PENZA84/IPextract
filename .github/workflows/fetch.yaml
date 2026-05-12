@@ -2,126 +2,87 @@ name: Update File and Extract IPs
 
 on:
   workflow_dispatch:
-  #schedule:
-    #- cron: '41 2 * * *'
-# push:
-#    branches: [ main ]
+  schedule:
+    - cron: '41 2 * * *'
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-    - uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Set up Git
-      run: |
-        git config --global user.name 'github-actions[bot]'
-        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+      - name: Prepare environment
+        run: |
+          mkdir -p split splitorg archive archiveorg splitbytype
+          touch proxies.txt ss.txt unique_add.txt new_proxies.txt nodup_proxies.txt
+          touch splitbytype/ss.txt
 
-    - name: Fetch, decode if needed, and combine file content
-      run: |
-        # Function to safely append content to a file
-        append_to_file() {
-          local content="$1"
-          local file="$2"
-          echo "$content" >> "$file"
-        }
-
-        # Initialize or clear the proxies.txt file
-        > proxies.txt
-        
-        # Function to check if a string is base64 encoded
-        is_base64() {
-          local string="$1"
-          echo "$string" | base64 -d > /dev/null 2>&1
-          return $?
-        }
-        
-        # List of URLs to fetch from
-        urls=(
-          "https://raw.githubusercontent.com/Surfboardv2ray/TGParse/main/configtg.txt"
-          "https://raw.githubusercontent.com/coldwater-10/Vpnclashfa/main/raw/irc.txt"
-          "https://raw.githubusercontent.com/coldwater-10/Vpnclashfa/main/raw/mci.txt"
-          "https://raw.githubusercontent.com/coldwater-10/Vpnclashfa/main/raw/mkb.txt"
-          "https://raw.githubusercontent.com/coldwater-10/Vpnclashfa/main/raw/hy2.txt"
-          "https://raw.githubusercontent.com/yebekhe/TVC/main/subscriptions/xray/normal/mix"
-          "https://raw.githubusercontent.com/yebekhe/V2Hub/main/merged"
-          "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/base64/vmess"
-          "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/base64/vless"
-          "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/normal/mix"
-          "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/normal/donated"
-          "https://raw.githubusercontent.com/itsyebekhe/HiN-VPN/main/subscription/normal/mix"
-        )
-        
-        # Fetch from each URL, decode if necessary, and append to proxies.txt
-        for url in "${urls[@]}"; do
-          echo "Fetching from $url"
-          content=$(curl -s "$url")
-          if [ -n "$content" ]; then
-            if is_base64 "$content"; then
-              echo "Content is base64 encoded. Decoding..."
-              decoded_content=$(echo "$content" | base64 -d 2>/dev/null)
-              if [ $? -eq 0 ]; then
-                append_to_file "$decoded_content" proxies.txt
+      - name: Fetch proxies
+        run: |
+          > proxies.txt
+          urls=(
+            "https://raw.githubusercontent.com/Surfboardv2ray/TGParse/main/configtg.txt"
+            "https://raw.githubusercontent.com/coldwater-10/Vpnclashfa/main/raw/irc.txt"
+            "https://raw.githubusercontent.com/coldwater-10/Vpnclashfa/main/raw/mci.txt"
+            "https://raw.githubusercontent.com/coldwater-10/Vpnclashfa/main/raw/mkb.txt"
+            "https://raw.githubusercontent.com/coldwater-10/Vpnclashfa/main/raw/hy2.txt"
+            "https://raw.githubusercontent.com/yebekhe/TVC/main/subscriptions/xray/normal/mix"
+            "https://raw.githubusercontent.com/yebekhe/V2Hub/main/merged"
+            "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/base64/vmess"
+            "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/base64/vless"
+            "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/normal/mix"
+            "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/normal/donated"
+            "https://raw.githubusercontent.com/itsyebekhe/HiN-VPN/main/subscription/normal/mix"
+          )
+          for url in "${urls[@]}"; do
+            content=$(curl -sL "$url")
+            if [ -n "$content" ]; then
+              if [[ "$content" =~ ^[A-Za-z0-9+/]*={0,2}$ ]]; then
+                echo "$content" | base64 -d >> proxies.txt 2>/dev/null || echo "$content" >> proxies.txt
               else
-                echo "Failed to decode content from $url"
+                echo "$content" >> proxies.txt
               fi
-            else
-              echo "Content is not base64 encoded. Appending directly..."
-              append_to_file "$content" proxies.txt
+              echo "" >> proxies.txt
             fi
-            # Add a newline after each file to separate content
-            append_to_file "" proxies.txt
-          else
-            echo "No content received from $url"
+          done
+
+      - name: Run Python Scripts
+        run: |
+          python no_dup.py || echo "skip"
+          python extract_ips.py || echo "skip"
+          python replace_ips.py || echo "skip"
+          python splitbytype.py || echo "skip"
+          python ssrandom.py || echo "skip"
+          python split_file.py || echo "skip"
+          python splitorg_file.py || echo "skip"
+
+      - name: Optimize and Push
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          # Обрезаем файлы перед пушем (чтобы не было 100МБ ошибки)
+          python -c "
+          import os
+          for root, dirs, files in os.walk('.'):
+              for f in files:
+                  if f.endswith('.txt'):
+                      p = os.path.join(root, f)
+                      if os.path.getsize(p) > 90*1024*1024:
+                          with open(p, 'r', encoding='utf-8') as file: lines = file.readlines()
+                          with open(p, 'w', encoding='utf-8') as file: file.writelines(lines[:350000])
+          "
+          
+          git add .
+          if ! git diff --cached --quiet; then
+            git commit -m "Update proxies and IPs"
+            git push
           fi
-        done
-
-        echo "Fetch and combine process completed."
-
-    - name: Run no_dup script
-      run: python no_dup.py
-
-    - name: Run IP extraction script
-      run: python extract_ips.py
-
-    - name : Run IP replacement script
-      run: python replace_ips.py
-
-    - name: Run splitbytype script
-      run: python splitbytype.py
-      
-    - name: List split directory contents before
-      run: ls -la split
-
-    - name: Archive, clear, and split new proxies
-      run: python split_file.py
-
-    - name: List split directory contents after
-      run: ls -la split
-      
-    - name: List splitorg directory contents before
-      run: ls -la splitorg
-
-    - name: Archive, clear, and split orgproxies
-      run: python splitorg_file.py
-
-    - name: List splitorg directory contents after
-      run: ls -la splitorg
-
-    - name: Commit and push if there are changes
-      run: |
-        git add proxies.txt unique_add.txt new_proxies.txt nodup_proxies.txt
-        git add -A split/  # This will track deletions as well
-        git add archive/**/*.txt
-        git add -A splitorg/  # This will track deletions as well
-        git add archiveorg/**/*.txt
-        git add -A splitbytype/  # This line includes the new output directory
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Update proxies and IPs, archive old files, and create new split files" && git push)
